@@ -1,13 +1,16 @@
 #!/bin/bash
 # minio-client.sh - MinIO verification helpers for integration tests
+#
+# All mc commands run via exec_in_manager() (docker exec into the Manager container)
+# so that MinIO (port 9000/9001) does not need to be exposed to the host.
 
 _MINIO_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_MINIO_LIB_DIR}/test-helpers.sh" 2>/dev/null || true
 
-# Configure mc alias for test MinIO
+# Configure mc alias for test MinIO (runs inside Manager container)
 # Usage: minio_setup
 minio_setup() {
-    mc alias set hiclaw-test "${TEST_MINIO_URL}" \
+    exec_in_manager mc alias set hiclaw-test "${TEST_MINIO_URL}" \
         "${TEST_MINIO_USER}" "${TEST_MINIO_PASSWORD}" 2>/dev/null
 }
 
@@ -20,21 +23,21 @@ minio_setup() {
 # Example: minio_file_exists "agents/manager/SOUL.md"
 minio_file_exists() {
     local path="$1"
-    mc stat "hiclaw-test/hiclaw-storage/${path}" > /dev/null 2>&1
+    exec_in_manager mc stat "hiclaw-test/hiclaw-storage/${path}" > /dev/null 2>&1
 }
 
 # Read file content from MinIO
 # Usage: minio_read_file <path>
 minio_read_file() {
     local path="$1"
-    mc cat "hiclaw-test/hiclaw-storage/${path}" 2>/dev/null
+    exec_in_manager mc cat "hiclaw-test/hiclaw-storage/${path}" 2>/dev/null
 }
 
 # List directory contents in MinIO
 # Usage: minio_list_dir <path>
 minio_list_dir() {
     local path="$1"
-    mc ls "hiclaw-test/hiclaw-storage/${path}" 2>/dev/null
+    exec_in_manager mc ls "hiclaw-test/hiclaw-storage/${path}" 2>/dev/null
 }
 
 # Wait for a file to appear in MinIO

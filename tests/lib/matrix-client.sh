@@ -1,5 +1,8 @@
 #!/bin/bash
 # matrix-client.sh - Matrix API wrapper for integration tests
+#
+# All requests are sent via exec_in_manager() (docker exec into the Manager container)
+# so that Matrix (port 6167) does not need to be exposed to the host.
 
 # Source test-helpers for environment vars
 _MATRIX_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +20,7 @@ matrix_register() {
     local password="$2"
     local token="${TEST_REGISTRATION_TOKEN}"
 
-    curl -sf -X POST "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/register" \
+    exec_in_manager curl -sf -X POST "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/register" \
         -H 'Content-Type: application/json' \
         -d '{
             "username": "'"${username}"'",
@@ -36,7 +39,7 @@ matrix_login() {
     local username="$1"
     local password="$2"
 
-    curl -sf -X POST "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/login" \
+    exec_in_manager curl -sf -X POST "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/login" \
         -H 'Content-Type: application/json' \
         -d '{
             "type": "m.login.password",
@@ -53,7 +56,7 @@ matrix_login() {
 # Usage: matrix_joined_rooms <access_token>
 matrix_joined_rooms() {
     local token="$1"
-    curl -sf "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/joined_rooms" \
+    exec_in_manager curl -sf "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/joined_rooms" \
         -H "Authorization: Bearer ${token}"
 }
 
@@ -70,7 +73,7 @@ matrix_send_message() {
     local body="$3"
     local txn_id="$(date +%s%N)"
 
-    curl -sf -X PUT "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/rooms/${room_id}/send/m.room.message/${txn_id}" \
+    exec_in_manager curl -sf -X PUT "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/rooms/${room_id}/send/m.room.message/${txn_id}" \
         -H "Authorization: Bearer ${token}" \
         -H 'Content-Type: application/json' \
         -d '{
@@ -87,7 +90,7 @@ matrix_read_messages() {
     local room_id="$2"
     local limit="${3:-20}"
 
-    curl -sf "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/rooms/${room_id}/messages?dir=b&limit=${limit}" \
+    exec_in_manager curl -sf "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/rooms/${room_id}/messages?dir=b&limit=${limit}" \
         -H "Authorization: Bearer ${token}"
 }
 
@@ -146,7 +149,7 @@ matrix_find_dm_room() {
 
     for room_id in ${rooms}; do
         local members
-        members=$(curl -sf "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/rooms/${room_id}/members" \
+        members=$(exec_in_manager curl -sf "${TEST_MATRIX_DIRECT_URL}/_matrix/client/v3/rooms/${room_id}/members" \
             -H "Authorization: Bearer ${token}" 2>/dev/null | jq -r '.chunk[].state_key' 2>/dev/null)
 
         if echo "${members}" | grep -q "${other_user}"; then

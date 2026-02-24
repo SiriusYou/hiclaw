@@ -1,7 +1,7 @@
 #!/bin/bash
 # test-01-manager-boot.sh - Case 1: Manager boots, all services healthy, IM login
-# Verifies: all ports accessible, Matrix login works, Higress Console session,
-#           MinIO initial storage, Manager Agent responds to "hello"
+# Verifies: gateway/console ports accessible, Matrix/MinIO healthy via docker exec,
+#           Matrix login works, Higress Console session, MinIO storage, Manager Agent responds
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/test-helpers.sh"
@@ -25,17 +25,27 @@ fi
 assert_http_code "http://${TEST_MANAGER_HOST}:${TEST_CONSOLE_PORT}/" "200" \
     "Higress Console port 8001 is accessible"
 
-assert_http_code "http://${TEST_MANAGER_HOST}:${TEST_MINIO_CONSOLE_PORT}/" "200" \
-    "MinIO Console port 9001 is accessible"
-
-assert_http_code "http://${TEST_MANAGER_HOST}:${TEST_MATRIX_PORT}/_matrix/client/versions" "200" \
-    "Tuwunel Matrix port 6167 is accessible"
-
 assert_http_code "http://${TEST_MANAGER_HOST}:${TEST_ELEMENT_PORT}/" "200" \
     "Element Web port 8088 is accessible"
 
-assert_http_code "http://${TEST_MANAGER_HOST}:${TEST_MINIO_PORT}/minio/health/live" "200" \
-    "MinIO API port 9000 is accessible"
+# Matrix and MinIO are not exposed to host; verify via docker exec into Manager container
+_MGMT_CTR="${TEST_MANAGER_CONTAINER:-hiclaw-manager-test}"
+
+MATRIX_CODE=$(docker exec "${_MGMT_CTR}" curl -s -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:6167/_matrix/client/versions" 2>/dev/null || echo "000")
+if [ "${MATRIX_CODE}" = "200" ]; then
+    log_pass "Tuwunel Matrix is healthy (internal port 6167)"
+else
+    log_fail "Tuwunel Matrix is healthy (internal port 6167, got HTTP ${MATRIX_CODE})"
+fi
+
+MINIO_CODE=$(docker exec "${_MGMT_CTR}" curl -s -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:9000/minio/health/live" 2>/dev/null || echo "000")
+if [ "${MINIO_CODE}" = "200" ]; then
+    log_pass "MinIO API is healthy (internal port 9000)"
+else
+    log_fail "MinIO API is healthy (internal port 9000, got HTTP ${MINIO_CODE})"
+fi
 
 # ---- Matrix Login ----
 log_section "Matrix Login"
@@ -70,22 +80,24 @@ else
     log_fail "MinIO mc alias configured"
 fi
 
-if minio_file_exists "agents/manager/SOUL.md" 2>/dev/null; then
-    log_pass "Manager SOUL.md exists in MinIO"
+# Manager workspace files are stored locally in the container (not in MinIO)
+# since commit 4e91c2d. Check them via docker exec using TEST_MANAGER_CONTAINER.
+if docker exec "${_MGMT_CTR}" test -f /root/manager-workspace/SOUL.md 2>/dev/null; then
+    log_pass "Manager SOUL.md exists in workspace"
 else
-    log_fail "Manager SOUL.md exists in MinIO (mc-mirror may still be initializing)"
+    log_fail "Manager SOUL.md exists in workspace"
 fi
 
-if minio_file_exists "agents/manager/AGENTS.md" 2>/dev/null; then
-    log_pass "Manager AGENTS.md exists in MinIO"
+if docker exec "${_MGMT_CTR}" test -f /root/manager-workspace/AGENTS.md 2>/dev/null; then
+    log_pass "Manager AGENTS.md exists in workspace"
 else
-    log_fail "Manager AGENTS.md exists in MinIO"
+    log_fail "Manager AGENTS.md exists in workspace"
 fi
 
-if minio_file_exists "agents/manager/HEARTBEAT.md" 2>/dev/null; then
-    log_pass "Manager HEARTBEAT.md exists in MinIO"
+if docker exec "${_MGMT_CTR}" test -f /root/manager-workspace/HEARTBEAT.md 2>/dev/null; then
+    log_pass "Manager HEARTBEAT.md exists in workspace"
 else
-    log_fail "Manager HEARTBEAT.md exists in MinIO"
+    log_fail "Manager HEARTBEAT.md exists in workspace"
 fi
 
 # ---- Manager Agent Responds ----

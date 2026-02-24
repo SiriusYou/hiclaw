@@ -366,12 +366,20 @@ EOF
         HOST_SHARE_MOUNT_ARGS="-v ${HICLAW_HOST_SHARE_DIR}:/host-share"
     fi
 
+    # YOLO mode: pass through if set in environment (enables autonomous decisions)
+    YOLO_ARGS=""
+    if [ "${HICLAW_YOLO:-}" = "1" ]; then
+        YOLO_ARGS="-e HICLAW_YOLO=1"
+        log "YOLO mode enabled (autonomous decisions, no interactive prompts)"
+    fi
+
     # Run Manager container
     log "Starting Manager container..."
     docker run -d \
         --name hiclaw-manager \
         --env-file "${ENV_FILE}" \
         -e HOST_ORIGINAL_HOME="${HICLAW_HOST_SHARE_DIR}" \
+        ${YOLO_ARGS} \
         ${TZ_ARGS} \
         ${SOCKET_MOUNT_ARGS} \
         -p "${HICLAW_PORT_GATEWAY}:8080" \

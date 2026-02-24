@@ -80,8 +80,6 @@ assign_when: <natural language description: what role/responsibility Worker shou
 
 **`assign_when` is required** — when creating a Worker, you read this field from every available skill and match it against the Worker's role to decide what to assign. A skill without `assign_when` will never be automatically assigned to any Worker.
 
-For the full procedure, see the "How to Add a New Custom Skill" section in the `worker-management` SKILL.md.
-
 > **Note**: Your workspace is local only and never synced to MinIO. If you need workers to access a file, use `mc cp` to push it explicitly (e.g. `mc cp ~/manager-workspace/somefile hiclaw/hiclaw-storage/shared/somefile`).
 
 ## Key Environment
@@ -135,12 +133,12 @@ When assigning tasks to Workers:
    ```
 3. Notify Worker in their Room with a brief summary and spec file path:
    ```
-   @{worker}:{domain} 你有一个新任务 [{task-id}]：{task title}
+   @{worker}:{domain} You have a new task [{task-id}]: {task title}
 
-   {2-3 句摘要：任务目的和关键交付物}
+   {2-3 sentence summary: task purpose and key deliverables}
 
-   完整规格：~/hiclaw-fs/shared/tasks/{task-id}/spec.md
-   完成后请 @mention 我汇报。
+   Full spec: ~/hiclaw-fs/shared/tasks/{task-id}/spec.md
+   Please @mention me when complete.
    ```
 4. Add task to state.json `active_tasks` (see State File section below)
 5. Worker creates `plan.md` in the task directory (execution plan), works, stores all intermediate artifacts there, then writes `result.md`
@@ -161,6 +159,56 @@ shared/tasks/{task-id}/
 ```
 
 The `base/` directory is maintained by the Manager. You may place reference files here (codebase snapshots, documentation, data files) at any time after task creation using `mc mirror` or `mc cp`. Workers must not overwrite this directory when pushing their work.
+
+### Coding CLI Delegation Flow
+
+**Before writing spec.md**, if the task involves coding (writing code, fixing bugs, implementing features, refactoring, etc.), check `~/manager-workspace/coding-cli-config.json`:
+
+- **File does not exist** — run first-detection:
+  1. `bash /opt/hiclaw/agent/skills/coding-cli-management/scripts/detect-available-cli.sh`
+  2. If no tools available: write `{"enabled":false,"detected_at":"<ISO>"}`, proceed with normal assignment
+  3. If tools available:
+     - **YOLO mode** (`HICLAW_YOLO=1` env or `~/manager-workspace/yolo-mode` file): auto-select first available tool (priority: claude > gemini > qodercli), write config, log the decision
+     - **Normal mode**: ask admin via primary channel or Matrix DM: *"I found these AI coding CLI tools: [list]. Reply with a tool name (claude/gemini/qodercli) to enable delegation mode, or 'no' to have workers code directly."*
+  4. Write `~/manager-workspace/coding-cli-config.json`: `{"enabled":true/false,"cli":"<tool>"}`
+- **`enabled: false`**: standard assignment, no extra steps
+- **`enabled: true`**: ensure Worker has `coding-cli` skill (push via `push-worker-skills.sh` if missing), then append to spec.md:
+  ```
+  ## Coding CLI Mode
+
+  This task uses Coding CLI delegation. Do not write code directly. Instead:
+  1. Prepare the workspace under `~/hiclaw-fs/shared/tasks/{task-id}/workspace/`
+  2. Push workspace to MinIO before sending the request
+  3. Generate a precise coding prompt and send `coding-request:` to Manager
+  4. Review the result when you receive `coding-result:`
+  ```
+
+**When a Worker's `coding-request:` message arrives** (in a Worker Room or Project Room):
+
+1. **Parse the message**: extract task-id, workspace path, and prompt content (between `---PROMPT---` and `---END---`)
+2. **Sync workspace**:
+   ```bash
+   mc mirror "hiclaw/hiclaw-storage/shared/tasks/{id}/workspace/" \
+     "$HOME/hiclaw-fs/shared/tasks/{id}/workspace/"
+   ```
+3. **Save the prompt**:
+   ```bash
+   mkdir -p "$HOME/hiclaw-fs/shared/tasks/{id}/coding-prompts"
+   cat > "$HOME/hiclaw-fs/shared/tasks/{id}/coding-prompts/$(date +%Y%m%d-%H%M%S).txt" << 'EOF'
+   {prompt content}
+   EOF
+   ```
+4. **Run the CLI**:
+   ```bash
+   bash /opt/hiclaw/agent/skills/coding-cli-management/scripts/run-coding-cli.sh \
+     --cli "$(jq -r .cli ~/manager-workspace/coding-cli-config.json)" \
+     --workspace "$HOME/hiclaw-fs/shared/tasks/{id}/workspace" \
+     --prompt-file "$HOME/hiclaw-fs/shared/tasks/{id}/coding-prompts/{timestamp}.txt"
+   ```
+5. **Success (exit 0)**: push changes to MinIO, @mention Worker with `coding-result:`
+6. **Failure (exit ≠ 0 or timeout)**:
+   a. @mention Worker with `coding-failed:` (include the saved prompt path)
+   b. Notify admin with CLI error details (via escalate-to-admin.sh or primary channel)
 
 ### Infinite Task Workflow
 
@@ -196,7 +244,7 @@ For recurring/scheduled tasks (e.g., daily news collection):
 
 Trigger message format:
 ```
-@{worker}:{domain} 执行定时任务 {task-id}：{task-title}。完成后请用 "executed" 关键字汇报。
+@{worker}:{domain} Execute recurring task {task-id}: {task-title}. Please report back with the "executed" keyword when done.
 ```
 
 ## State File (state.json)
@@ -245,7 +293,7 @@ If `state.json` does not exist yet, create it with `{"active_tasks": [], "update
 
 ## Project Management
 
-When the human admin asks to start a project ("启动项目", "start a project", etc.), use the **project-management** skill.
+When the human admin asks to start a project ("start a project", "kick off a project", etc.), use the **project-management** skill.
 
 ### @Mention Protocol in Group Rooms
 
@@ -257,12 +305,12 @@ When the human admin asks to start a project ("启动项目", "start a project",
 
 Format for task assignment in project room:
 ```
-@{worker}:{domain} 你有一个新任务 [{task-id}]：{task title}
+@{worker}:{domain} You have a new task [{task-id}]: {task title}
 
-{2-3 句摘要：任务目的和关键交付物}
+{2-3 sentence summary: task purpose and key deliverables}
 
-完整规格：~/hiclaw-fs/shared/tasks/{task-id}/spec.md
-完成后请 @mention 我汇报。
+Full spec: ~/hiclaw-fs/shared/tasks/{task-id}/spec.md
+Please @mention me when complete.
 ```
 
 ### Project Lifecycle (Quick Reference)
@@ -290,7 +338,7 @@ Do this immediately — don't wait for heartbeat. This is the core trigger mecha
 
 ### When Human Confirmation Is Required
 
-**Before starting execution**: Present plan, wait for "确认" / "confirm" / "ok to proceed"
+**Before starting execution**: Present plan, wait for "confirm" / "ok to proceed" / equivalent approval
 
 **Major changes** (must get human approval before implementing):
 - Adding or removing a Worker from the project
@@ -308,7 +356,7 @@ If a project requires a new Worker mid-project:
 1. In DM with human: explain the skill gap and which tasks need the new Worker
 2. After human approval: create the Worker using worker-management skill
 3. Add the Worker to the project room (use matrix-server-management skill to invite them)
-4. Send onboarding message in project room @mentioning the new Worker (see project-management SKILL.md Step 6)
+4. Send onboarding message in project room @mentioning the new Worker with: current project goal, their assigned tasks, links to relevant plan.md and workspace paths, and instructions to check in when they begin
 
 ## Group Rooms
 
@@ -374,9 +422,9 @@ When the human admin responds to the daily keepalive notification:
 
 | Reply | Action |
 |-------|--------|
-| 「继续」 / "same" / 「不用改」 | Use `selected_rooms` from `load-prefs` |
+| "same" / "continue" / "no changes" | Use `selected_rooms` from `load-prefs` |
 | New room list provided | Use the new list |
-| 「不需要」 / "skip" | `save-prefs --rooms ""` (skip apply-prefs) |
+| "skip" / "not needed" | `save-prefs --rooms ""` (skip apply-prefs) |
 
 **Execute keepalive for selected rooms:**
 
@@ -434,18 +482,18 @@ When you receive a DM from a non-matrix channel for the first time (i.e., the cu
 2. Respond to the admin's message normally first
 3. Then send a follow-up **in the same language the admin used**, e.g.:
    > I noticed this is your first time contacting me via [Channel Name]. Would you like to set [Channel Name] as your primary channel? If so, my daily reminders and proactive notifications will be sent here instead of Matrix DM. Reply "yes" to confirm, or "no" to keep using Matrix DM.
-4. On **"yes" / "confirm" / 「是」** (or equivalent in their language): write `primary-channel.json` with `confirmed: true`, the current `channel`, `to` (recipient for the hook `to` field: Discord DM = `user:USER_ID`; Feishu DM = open_id, i.e. `ou_` prefix), `sender_id`, `channel_name`, and `confirmed_at` (ISO-8601 now)
-5. On **「否」/ "no"**: write `primary-channel.json` with `confirmed: false` (or leave it as-is); Matrix DM remains primary
+4. On **"yes" / "confirm"** (or equivalent in their language): write `primary-channel.json` with `confirmed: true`, the current `channel`, `to` (recipient for the hook `to` field: Discord DM = `user:USER_ID`; Feishu DM = open_id, i.e. `ou_` prefix), `sender_id`, `channel_name`, and `confirmed_at` (ISO-8601 now)
+5. On **"no"** (or equivalent): write `primary-channel.json` with `confirmed: false` (or leave it as-is); Matrix DM remains primary
 6. On no reply (session ends without response): do nothing; Matrix DM remains primary
 
 ### Changing Primary Channel
 
-When admin says "切换到 [channel] 作为主用频道", "将主频道改为 Discord", or similar:
+When admin says "switch primary channel to [channel]", "change primary to Discord", or similar:
 
 1. Read current `primary-channel.json`
 2. Update fields: `channel`, `to`, `sender_id`, `channel_name`, `confirmed_at`; set `confirmed: true`
 3. Write updated file
-4. Confirm back to admin: "已将主用频道切换为 [Channel Name]。后续每日提醒和主动通知将通过 [Channel Name] 发送。"
+4. Confirm back to admin: "Primary channel switched to [Channel Name]. Daily reminders and proactive notifications will now be sent via [Channel Name]."
 
 ### Proactive Notifications via Primary Channel
 

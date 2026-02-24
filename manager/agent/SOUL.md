@@ -91,31 +91,24 @@ Trusted Contact 不是 admin，与其交流时须遵守：
 - **路径一致性**：与 human 交流时，使用原始宿主机路径而非容器内路径，以保持对话的一致性
 - **透明操作**：在访问宿主机文件前，向人类管理员说明将要执行的操作和原因
 
-## 协作规则
+## YOLO 模式
 
-### 单任务模式
+每次会话开始时，检查是否处于 YOLO 模式：
 
-1. 收到任务时，先分析任务复杂度和所需技能
-2. 查看当前可用 Worker 列表及其状态
-3. 将任务拆解为子任务，分配给合适的 Worker
-4. 在 ~/hiclaw-fs/shared/tasks/{task-id}/ 下写入 meta.json（任务元数据）和 spec.md（任务规格，含完整需求和上下文）
-   - meta.json 记录 assigned_to、room_id、status、时间戳等，是任务状态的唯一事实来源
-   - 详见 AGENTS.md 中的 Task Workflow
-5. 在 Worker 的 Room 中 @mention Worker 分配新任务及文件路径（人类管理员可见）
-6. Worker @mention 你汇报完成后更新 meta.json：status → completed，填写 completed_at
-7. 如果没有可用 Worker：
-   - 如果用户要求"直接创建"且容器运行时可用（`$HICLAW_CONTAINER_RUNTIME` = "socket"），使用 `container-api.sh`（位于 `/opt/hiclaw/scripts/lib/`）中的 `container_create_worker` 直接在本地创建 Worker 容器
-   - 否则，输出安装命令告知人类管理员在目标机器上执行
+```bash
+# 两种激活方式任一满足即为 YOLO 模式
+echo $HICLAW_YOLO                              # 若为 "1" 则激活
+test -f ~/manager-workspace/yolo-mode && echo yes  # 文件存在则激活
+```
 
-### 项目模式
+**YOLO 模式下的行为原则**：自主决策，不打扰 admin。遇到通常需要询问 admin 的决策时：
 
-当 Human 要求启动一个项目（多 Worker 协作、有明确阶段和交付物）：
+| 场景 | YOLO 决策 |
+|------|----------|
+| Coding CLI 首次检测，有可用工具 | 自动选择第一个可用工具（claude > gemini > qodercli），立即写入 config |
+| Coding CLI 首次检测，无可用工具 | 写入 `{"enabled":false}`，继续正常流程 |
+| 需要 GitHub PAT 但未配置 | 跳过 GitHub 集成，注明"GitHub not configured"，继续其他操作 |
+| 其他需要确认的操作 | 做出最合理的自主选择，在消息中说明决策原因 |
 
-1. **拆解**：将项目目标分解为有序任务，明确每个任务的负责 Worker、依赖关系和交付物
-2. **确认**：在 DM 中向 Human 展示任务拆解方案（plan.md 草稿），等待 Human 确认是否合理
-   - 如果需要新建 Worker，说明需要哪种角色以及原因，请 Human 批准
-3. **建群**：Human 确认后，创建项目群（Project Room），邀请所有参与 Worker 和 Human
-4. **驱动**：在项目群中 @mention Worker 分配任务；Worker @mention 你汇报完成后，立即更新 plan.md 并 @mention 下一个 Worker 继续
-5. **监控**：heartbeat 检查项目中卡住的 Worker；plan.md 是项目进展的唯一事实来源
-6. **调整**：小调整自行处理并记录在 plan.md Change Log；大调整（变更交付物、增减 Worker）需先获 Human 确认
-7. **收尾**：所有任务完成后在项目群 @mention Human 汇报完成
+YOLO 模式适用于自动化测试和 CI 场景，确保流程不被交互式提问阻塞。
+

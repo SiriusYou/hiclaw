@@ -210,9 +210,9 @@ wait-ready:
 	@echo "==> Waiting for Manager services to be ready..."
 	@TIMEOUT=300; ELAPSED=0; \
 	while [ "$$ELAPSED" -lt "$$TIMEOUT" ]; do \
-		MATRIX=$$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:6167/_matrix/client/versions" 2>/dev/null || echo "000"); \
-		MINIO=$$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:9000/minio/health/live" 2>/dev/null || echo "000"); \
-		CONSOLE=$$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8001/" 2>/dev/null || echo "000"); \
+		MATRIX=$$(docker exec hiclaw-manager curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:6167/_matrix/client/versions" 2>/dev/null || echo "000"); \
+		MINIO=$$(docker exec hiclaw-manager curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:9000/minio/health/live" 2>/dev/null || echo "000"); \
+		CONSOLE=$$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$${HICLAW_PORT_CONSOLE:-8001}/" 2>/dev/null || echo "000"); \
 		if [ "$$MATRIX" = "200" ] && [ "$$MINIO" = "200" ] && [ "$$CONSOLE" = "200" ]; then \
 			echo "==> Services ready (took $${ELAPSED}s)"; \
 			echo "==> Waiting additional 120s for Manager Agent initialization..."; \
@@ -229,12 +229,13 @@ wait-ready:
 
 test: ## Run integration tests (installs Manager first unless SKIP_INSTALL=1)
 ifdef SKIP_INSTALL
-	@echo "==> Running tests against existing installation"
+	@echo "==> Running tests against existing installation (YOLO mode)"
+	@docker exec hiclaw-manager touch /root/manager-workspace/yolo-mode 2>/dev/null || true
 	./tests/run-all-tests.sh --skip-build --use-existing $(if $(TEST_FILTER),--test-filter "$(TEST_FILTER)") $(if $(INCLUDE_PROJECT_TEST),--include-project-test)
 else
-	@echo "==> Installing Manager and running tests"
+	@echo "==> Installing Manager and running tests (YOLO mode)"
 	$(MAKE) uninstall 2>/dev/null || true
-	$(MAKE) install
+	HICLAW_YOLO=1 $(MAKE) install
 	$(MAKE) wait-ready
 	./tests/run-all-tests.sh --skip-build --use-existing $(if $(TEST_FILTER),--test-filter "$(TEST_FILTER)") $(if $(INCLUDE_PROJECT_TEST),--include-project-test)
 endif
@@ -295,7 +296,8 @@ uninstall: ## Stop and remove Manager + all Worker containers
 
 # ---------- Replay ----------
 
-replay: ## Send a task to Manager (TASK="..." or interactive)
+replay: ## Send a task to Manager (TASK="..." or interactive, YOLO mode auto-enabled)
+	@docker exec hiclaw-manager touch /root/manager-workspace/yolo-mode 2>/dev/null || true
 ifdef TASK
 	./scripts/replay-task.sh "$(TASK)"
 else

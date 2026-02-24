@@ -64,6 +64,8 @@ if [ "${USE_EXISTING}" = true ]; then
             esac
         done < "${ENV_FILE}"
     fi
+    # When using an existing installation, the manager container is named hiclaw-manager
+    export TEST_MANAGER_CONTAINER="${TEST_MANAGER_CONTAINER:-hiclaw-manager}"
 fi
 
 # ============================================================
@@ -124,11 +126,16 @@ if [ "${USE_EXISTING}" = true ]; then
     log "  Matrix domain: ${TEST_MATRIX_DOMAIN}"
     log "  Manager host: ${TEST_MANAGER_HOST}"
 
-    # Verify the Manager is actually running
-    if ! curl -sf "http://${TEST_MANAGER_HOST}:6167/_matrix/client/versions" > /dev/null 2>&1; then
-        error "Manager does not appear to be running at ${TEST_MANAGER_HOST}:6167. Start it with 'make install' first."
+    # Verify the Manager is actually running (Matrix is not exposed; check via docker exec)
+    if ! docker exec "${TEST_MANAGER_CONTAINER}" curl -sf "http://127.0.0.1:6167/_matrix/client/versions" > /dev/null 2>&1; then
+        error "Manager does not appear to be running (container: ${TEST_MANAGER_CONTAINER}). Start it with 'make install' first."
     fi
     log "Manager is reachable"
+
+    # Enable YOLO mode for test run (auto-decision, no interactive prompts)
+    docker exec "${TEST_MANAGER_CONTAINER}" touch /root/manager-workspace/yolo-mode 2>/dev/null && \
+        log "YOLO mode enabled (${TEST_MANAGER_CONTAINER})" || \
+        log "WARNING: Could not enable YOLO mode (container may differ)"
 else
     log "Starting Manager container..."
 
@@ -154,9 +161,11 @@ else
         log "No container runtime socket found (Worker creation will output commands)"
     fi
 
+    export TEST_MANAGER_CONTAINER="${MANAGER_CONTAINER}"
     docker run -d \
         --name "${MANAGER_CONTAINER}" \
         ${SOCKET_MOUNT_ARGS} \
+        -e "HICLAW_YOLO=1" \
         -e "HICLAW_ADMIN_USER=${TEST_ADMIN_USER}" \
         -e "HICLAW_ADMIN_PASSWORD=${TEST_ADMIN_PASSWORD}" \
         -e "HICLAW_MANAGER_PASSWORD=$(openssl rand -hex 32)" \
@@ -172,10 +181,7 @@ else
         -e "HICLAW_GITHUB_TOKEN=${HICLAW_GITHUB_TOKEN:-}" \
         -p 8080:8080 \
         -p 8001:8001 \
-        -p 9001:9001 \
-        -p 6167:6167 \
         -p 8088:8088 \
-        -p 9000:9000 \
         "hiclaw/manager-agent:${HICLAW_VERSION}"
 
     # ============================================================
@@ -187,9 +193,11 @@ else
     ELAPSED=0
 
     while [ "${ELAPSED}" -lt "${TIMEOUT}" ]; do
-        # Check key services
-        MATRIX_OK=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:6167/_matrix/client/versions" 2>/dev/null) || true
-        MINIO_OK=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:9000/minio/health/live" 2>/dev/null) || true
+        # Matrix and MinIO are not exposed to host; check via docker exec
+        MATRIX_OK=$(docker exec "${MANAGER_CONTAINER}" curl -s -o /dev/null -w '%{http_code}' \
+            "http://127.0.0.1:6167/_matrix/client/versions" 2>/dev/null) || true
+        MINIO_OK=$(docker exec "${MANAGER_CONTAINER}" curl -s -o /dev/null -w '%{http_code}' \
+            "http://127.0.0.1:9000/minio/health/live" 2>/dev/null) || true
         CONSOLE_OK=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8001/" 2>/dev/null) || true
 
         if [ "${MATRIX_OK}" = "200" ] && [ "${MINIO_OK}" = "200" ] && [ "${CONSOLE_OK}" = "200" ]; then

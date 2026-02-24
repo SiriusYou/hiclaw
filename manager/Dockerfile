@@ -42,6 +42,9 @@ RUN cd /opt/openclaw && pnpm install && pnpm build
 
 RUN npm install -g mcporter
 
+# Install AI coding CLI tools here (npm works correctly in this stage)
+RUN npm install -g @google/gemini-cli @anthropic-ai/claude-code
+
 # ============ Final Image: Higress All-in-One as base ============
 # This preserves all Higress binaries, scripts, and configs at their original paths
 FROM ${HIGRESS_REGISTRY}/higress/all-in-one:latest
@@ -82,6 +85,13 @@ COPY --from=openclaw-build /usr/local/lib/node_modules /usr/local/lib/node_modul
 COPY --from=openclaw-build /opt/openclaw /opt/openclaw
 COPY --from=openclaw-build /usr/local/bin/mcporter /usr/local/bin/mcporter
 
+# AI coding CLI binaries (installed in openclaw-build where npm works correctly)
+# node_modules already copied above.
+# claude: COPY works (uses absolute require paths internally)
+# gemini: uses relative ESM imports (import './src/gemini.js'), so symlink is required
+#         to preserve the correct base directory for module resolution
+COPY --from=openclaw-build /usr/local/bin/claude /usr/local/bin/claude
+
 # Ensure openclaw binary is on PATH and config is found
 ENV PATH="/opt/openclaw/packages/clawdbot/node_modules/.bin:${PATH}"
 ENV OPENCLAW_CONFIG_PATH="/root/manager-workspace/openclaw.json"
@@ -93,8 +103,15 @@ COPY scripts/ /opt/hiclaw/scripts/
 COPY agent/ /opt/hiclaw/agent/
 COPY configs/ /opt/hiclaw/configs/
 
+# ---- Install AI coding CLI tools ----
+# gemini: symlink to dist/index.js so relative ESM imports resolve correctly
+# qodercli via official install script (best-effort; failure does not block build).
+RUN ln -sf /usr/local/lib/node_modules/@google/gemini-cli/dist/index.js /usr/local/bin/gemini
+RUN curl -fsSL https://qoder.com/install.sh | bash || true
+
 # Make scripts executable
 RUN chmod +x /opt/hiclaw/scripts/init/*.sh /opt/hiclaw/scripts/lib/*.sh && \
+    chmod +x /opt/hiclaw/scripts/setup-host-symlinks.sh && \
     find /opt/hiclaw/agent/skills/*/scripts -name '*.sh' -exec chmod +x {} + 2>/dev/null || true && \
     find /opt/hiclaw/agent/worker-skills/*/scripts -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
 
