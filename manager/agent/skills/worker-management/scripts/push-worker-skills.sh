@@ -150,6 +150,7 @@ _notify_worker() {
     fi
 
     local msg="@${worker}:${MATRIX_DOMAIN} 我已向你的工作区推送了以下 skills 更新：[${skills_list}]。请运行以下命令同步：bash /opt/hiclaw/agent/skills/file-sync/scripts/hiclaw-sync.sh"
+    local worker_id="@${worker}:${MATRIX_DOMAIN}"
 
     local txn_id
     txn_id="pws-$(date +%s%N)"
@@ -158,7 +159,7 @@ _notify_worker() {
         "http://127.0.0.1:6167/_matrix/client/v3/rooms/${room_id}/send/m.room.message/${txn_id}" \
         -H "Authorization: Bearer ${token}" \
         -H 'Content-Type: application/json' \
-        -d "{\"msgtype\":\"m.text\",\"body\":\"${msg}\"}" \
+        -d "{\"msgtype\":\"m.text\",\"body\":\"${msg}\",\"m.mentions\":{\"user_ids\":[\"${worker_id}\"]}}" \
         > /dev/null 2>&1 \
         || log "  WARNING: Failed to send Matrix notification to ${worker}"
     log "  Notified worker '${worker}' via Matrix"

@@ -35,14 +35,23 @@ _matrix_get() {
     curl -s -H "Authorization: Bearer ${MATRIX_TOKEN}" "${MATRIX_URL}$1"
 }
 
+# _matrix_send <room_id> <body> [user_id1 user_id2 ...]
+# Extra args are added to m.mentions.user_ids so requireMention:true agents are triggered.
 _matrix_send() {
     local room_id="$1"
     local body="$2"
+    shift 2
     local encoded_room
     encoded_room=$(echo "$room_id" | sed 's/!/%21/g; s/:/%3A/g')
     local txn_id="keepalive-$(date -u +%s)-$$"
+    # Build m.mentions.user_ids array from remaining args
+    local mentions_json="[]"
+    if [ $# -gt 0 ]; then
+        mentions_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+    fi
     local payload
-    payload=$(jq -n --arg b "$body" '{"msgtype":"m.text","body":$b}')
+    payload=$(jq -n --arg b "$body" --argjson m "$mentions_json" \
+        '{"msgtype":"m.text","body":$b,"m.mentions":{"user_ids":$m}}')
     curl -s -X PUT \
         -H "Authorization: Bearer ${MATRIX_TOKEN}" \
         -H "Content-Type: application/json" \
@@ -284,16 +293,18 @@ action_keepalive() {
         sleep 30
     fi
 
-    # Build mention string and send
+    # Build mention string and member array, then send
     local mention_str=""
+    local member_ids=()
     while IFS= read -r member; do
         [ -n "$member" ] || continue
         mention_str="${mention_str}${member} "
+        member_ids+=("$member")
     done <<< "$members"
     mention_str="${mention_str% }"
 
     local body="[Session keepalive] ${mention_str} — maintaining conversation history for this room."
-    _matrix_send "$room_id" "$body" | jq -r '.event_id // "ERROR"' 2>/dev/null
+    _matrix_send "$room_id" "$body" "${member_ids[@]}" | jq -r '.event_id // "ERROR"' 2>/dev/null
     _log "Keepalive message sent to room $room_id"
 }
 

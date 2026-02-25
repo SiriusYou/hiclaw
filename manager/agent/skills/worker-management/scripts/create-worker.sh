@@ -418,7 +418,7 @@ if [ -f "${REGISTRY_FILE_EARLY}" ]; then
                         "http://127.0.0.1:6167/_matrix/client/v3/rooms/${EW_ROOM_ID}/send/m.room.message/${TXN_ID}" \
                         -H "Authorization: Bearer ${MANAGER_MATRIX_TOKEN}" \
                         -H 'Content-Type: application/json' \
-                        -d "{\"msgtype\":\"m.text\",\"body\":\"@${ew}:${MATRIX_DOMAIN} Your config has been updated (new worker @${WORKER_NAME}:${MATRIX_DOMAIN} added to groupAllowFrom). Please run: hiclaw-sync\"}" \
+                        -d "{\"msgtype\":\"m.text\",\"body\":\"@${ew}:${MATRIX_DOMAIN} Your config has been updated (new worker @${WORKER_NAME}:${MATRIX_DOMAIN} added to groupAllowFrom). Please run: hiclaw-sync\",\"m.mentions\":{\"user_ids\":[\"@${ew}:${MATRIX_DOMAIN}\"]}}" \
                         > /dev/null 2>&1 \
                         && log "  Notified @${ew} to run hiclaw-sync" \
                         || log "  WARNING: Failed to notify @${ew}"
