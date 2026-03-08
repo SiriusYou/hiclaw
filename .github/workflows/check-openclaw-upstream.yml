@@ -1,0 +1,165 @@
+name: Check OpenClaw Upstream
+
+on:
+  schedule:
+    # Run every Monday at 09:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    env:
+      # Official OpenClaw upstream repository
+      UPSTREAM_REPO: https://github.com/openclaw/openclaw.git
+      UPSTREAM_BRANCH: main
+      # Current pinned commit in openclaw-base/Dockerfile
+      PINNED_COMMIT: df5225e1fc310158f84f888b74ba2ea815190181
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract pinned commit from Dockerfile
+        id: pinned
+        run: |
+          # Extract the commit hash from openclaw-base/Dockerfile
+          COMMIT=$(grep -oP 'git fetch --depth 1 origin \K[0-9a-f]{40}' openclaw-base/Dockerfile || echo "")
+          if [ -z "$COMMIT" ]; then
+            echo "::error::Could not extract pinned commit from Dockerfile"
+            exit 1
+          fi
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Pinned commit: $COMMIT"
+
+      - name: Check upstream for new commits
+        id: upstream
+        run: |
+          # Get latest commit on upstream main branch
+          LATEST=$(git ls-remote "$UPSTREAM_REPO" "refs/heads/$UPSTREAM_BRANCH" | cut -f1)
+          if [ -z "$LATEST" ]; then
+            echo "::error::Could not fetch latest commit from upstream"
+            exit 1
+          fi
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Latest upstream commit: $LATEST"
+
+          PINNED="${{ steps.pinned.outputs.commit }}"
+          if [ "$LATEST" = "$PINNED" ]; then
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+            echo "✅ Already up to date"
+          else
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+            echo "⚠️ New commits available"
+          fi
+
+      - name: Get commit details
+        if: steps.upstream.outputs.has_updates == 'true'
+        id: details
+        run: |
+          PINNED="${{ steps.pinned.outputs.commit }}"
+          LATEST="${{ steps.upstream.outputs.latest }}"
+
+          # Clone upstream to get commit log between pinned and latest
+          git clone --filter=blob:none --no-checkout "$UPSTREAM_REPO" /tmp/openclaw-upstream
+          cd /tmp/openclaw-upstream
+          git fetch origin "$UPSTREAM_BRANCH"
+
+          # Get commit count and log
+          COUNT=$(git rev-list "$PINNED".."$LATEST" --count 2>/dev/null || echo "unknown")
+          LOG=$(git log "$PINNED".."$LATEST" --oneline --no-decorate -20 2>/dev/null || echo "Could not retrieve commit log")
+
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+          # Write log to file (multi-line safe)
+          echo "$LOG" > /tmp/commit-log.txt
+
+      - name: Check for existing issue
+        if: steps.upstream.outputs.has_updates == 'true'
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if there's already an open issue for upstream sync
+          EXISTING=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "upstream-sync" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING" ]; then
+            echo "issue_number=$EXISTING" >> "$GITHUB_OUTPUT"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Found existing issue #$EXISTING"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update issue
+        if: steps.upstream.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PINNED="${{ steps.pinned.outputs.commit }}"
+          LATEST="${{ steps.upstream.outputs.latest }}"
+          COUNT="${{ steps.details.outputs.count }}"
+          LOG=$(cat /tmp/commit-log.txt)
+
+          BODY=$(cat <<EOF
+          ## OpenClaw Upstream Update Available
+
+          **Current pinned commit:** \`${PINNED:0:12}\`
+          **Latest upstream commit:** \`${LATEST:0:12}\`
+          **New commits:** ${COUNT}
+
+          ### Recent commits (up to 20)
+
+          \`\`\`
+          $LOG
+          \`\`\`
+
+          ### Compare
+
+          https://github.com/openclaw/openclaw/compare/${PINNED:0:12}...${LATEST:0:12}
+
+          ### How to update
+
+          1. Review the changes in the compare link above
+          2. Update the commit hash in \`openclaw-base/Dockerfile\`
+          3. Test the build locally: \`make build-openclaw-base\`
+          4. Verify HiClaw config templates are still compatible
+          5. Push and let CI rebuild the base image
+
+          ---
+          *This issue was automatically created by the [upstream check workflow](https://github.com/${{ github.repository }}/actions/workflows/check-openclaw-upstream.yml).*
+          EOF
+          )
+
+          if [ "${{ steps.existing.outputs.exists }}" = "true" ]; then
+            # Update existing issue
+            ISSUE_NUM="${{ steps.existing.outputs.issue_number }}"
+            gh issue comment "$ISSUE_NUM" \
+              --repo "${{ github.repository }}" \
+              --body "$BODY"
+            echo "Updated existing issue #$ISSUE_NUM"
+          else
+            # Create new issue
+            gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "OpenClaw upstream has ${COUNT} new commit(s)" \
+              --body "$BODY" \
+              --label "upstream-sync"
+            echo "Created new issue"
+          fi
+
+      - name: Summary
+        run: |
+          echo "### OpenClaw Upstream Check" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pinned:** \`${{ steps.pinned.outputs.commit }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Latest:** \`${{ steps.upstream.outputs.latest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Has updates:** ${{ steps.upstream.outputs.has_updates }}" >> $GITHUB_STEP_SUMMARY
