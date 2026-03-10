@@ -240,7 +240,7 @@ Once the Worker is confirmed `ready`, send a message in the Worker's Room to kic
 The Worker will greet the room. After the Worker's greeting, send a follow-up addressed to the admin:
 
 ```
-@${HICLAW_ADMIN_USER}:${HICLAW_MATRIX_DOMAIN} <WORKER_NAME> is ready. When giving them tasks or instructions, remember to @mention them so they see your message.
+@${HICLAW_ADMIN_USER}:${HICLAW_MATRIX_DOMAIN} <WORKER_NAME> is ready. When giving them tasks or instructions, remember to @mention them so they respond to your message (Workers receive all messages from authorized senders but are instructed to respond only when @mentioned).
 
 Note: By default, Workers can only be @mentioned by you (Manager) and the human admin — not by other Workers. This prevents accidental mutual-mention loops between Workers. If a project requires Workers to coordinate directly with each other, that can be enabled explicitly per-project.
 ```

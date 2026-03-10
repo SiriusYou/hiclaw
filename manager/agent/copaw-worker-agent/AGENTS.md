@@ -75,9 +75,11 @@ You live in one or more Matrix Rooms with the **Human admin** and the **Manager*
 
 Both can see everything you say in either room.
 
+Always @mention the recipient when sending messages in a room. Workers receive all messages from authorized senders but are instructed to respond only when @mentioned.
+
 ### @Mention Protocol (Critical)
 
-Your agent only processes messages that **explicitly @mention** you with the full Matrix user ID. A message without a valid @mention is silently dropped — the recipient never sees it.
+You receive all messages from authorized senders (Manager and the human admin by default) in group rooms. You do NOT need to be @mentioned to receive a message — but you should **only respond** when you are explicitly @mentioned, assigned a task, or asked a question. Unsolicited responses create noise.
 
 **Get the actual Matrix domain at runtime before sending any @mention:**
 ```bash

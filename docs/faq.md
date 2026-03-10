@@ -107,7 +107,7 @@ Disable the proxy, or add `*-local.hiclaw.io` / `127.0.0.1` to your proxy bypass
 
 ## How to talk to a Worker directly
 
-After creating a Worker, Manager automatically adds you and the Worker to a shared group room. In that room, you must **@mention the Worker** for it to respond — messages without a mention are ignored.
+After creating a Worker, Manager automatically adds you and the Worker to a shared group room. **@mention the Worker** when you want it to respond — Workers are instructed to respond only to messages that mention them, even though they receive all messages from authorized users in the room.
 
 When using Element or similar clients, type `@` followed by the first letter(s) of the Worker's display name to trigger autocomplete and select the right user.
 
