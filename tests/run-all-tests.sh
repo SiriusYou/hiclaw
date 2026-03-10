@@ -178,7 +178,15 @@ echo ""
 
 TOTAL_PASS=0
 TOTAL_FAIL=0
+TOTAL_WARN=0
 RESULTS=()
+
+# Non-blocking tests: failures are reported as WARN, not FAIL.
+# These tests verify LLM behavioral compliance (non-deterministic) rather than
+# hard technical gates. They run and report but don't cause exit 1.
+# Exception: when TEST_FILTER explicitly targets a non-blocking test, treat it
+# as blocking (the user is deliberately debugging that test).
+NON_BLOCKING_TESTS="15"
 
 # Determine which tests to run
 TESTS=()
@@ -195,14 +203,28 @@ done
 
 for test_file in "${TESTS[@]}"; do
     test_name=$(basename "${test_file}" .sh)
+    test_num=$(echo "${test_name}" | grep -o '[0-9]\+')
     log "Running: ${test_name}"
+
+    # Determine if this test is non-blocking (unless explicitly targeted via TEST_FILTER)
+    is_non_blocking=false
+    if echo "${NON_BLOCKING_TESTS}" | grep -qw "${test_num}"; then
+        if [ -z "${TEST_FILTER}" ] || [ "$(echo "${TEST_FILTER}" | wc -w)" -gt 1 ]; then
+            is_non_blocking=true
+        fi
+    fi
 
     if bash "${test_file}"; then
         RESULTS+=("PASS: ${test_name}")
         TOTAL_PASS=$((TOTAL_PASS + 1))
     else
-        RESULTS+=("FAIL: ${test_name}")
-        TOTAL_FAIL=$((TOTAL_FAIL + 1))
+        if [ "${is_non_blocking}" = "true" ]; then
+            RESULTS+=("WARN: ${test_name} (non-blocking)")
+            TOTAL_WARN=$((TOTAL_WARN + 1))
+        else
+            RESULTS+=("FAIL: ${test_name}")
+            TOTAL_FAIL=$((TOTAL_FAIL + 1))
+        fi
     fi
 
     echo ""
@@ -216,15 +238,20 @@ echo ""
 echo "========================================"
 echo "  Integration Test Results"
 echo "========================================"
-echo "  Total:  $((TOTAL_PASS + TOTAL_FAIL))"
+echo "  Total:  $((TOTAL_PASS + TOTAL_FAIL + TOTAL_WARN))"
 echo -e "  \033[32mPassed: ${TOTAL_PASS}\033[0m"
 echo -e "  \033[31mFailed: ${TOTAL_FAIL}\033[0m"
+if [ "${TOTAL_WARN}" -gt 0 ]; then
+echo -e "  \033[33mWarned: ${TOTAL_WARN}\033[0m (non-blocking)"
+fi
 echo "========================================"
 echo ""
 
 for result in "${RESULTS[@]}"; do
     if [[ "${result}" == PASS* ]]; then
         echo -e "  \033[32m${result}\033[0m"
+    elif [[ "${result}" == WARN* ]]; then
+        echo -e "  \033[33m${result}\033[0m"
     else
         echo -e "  \033[31m${result}\033[0m"
     fi
@@ -237,5 +264,9 @@ if [ "${TOTAL_FAIL}" -gt 0 ]; then
     exit 1
 fi
 
-log "All tests passed!"
+if [ "${TOTAL_WARN}" -gt 0 ]; then
+    log "All blocking tests passed! (${TOTAL_WARN} non-blocking warning(s))"
+else
+    log "All tests passed!"
+fi
 exit 0

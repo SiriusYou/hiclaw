@@ -63,7 +63,7 @@ Both can see everything you say in either room.
 
 ### @Mention Protocol (Critical)
 
-OpenClaw only wakes an agent when **explicitly @mentioned** with the full Matrix user ID. A message without a valid @mention is silently dropped — the recipient never sees it.
+OpenClaw delivers all messages from authorized senders (Manager and the human admin by default) in group rooms. You do NOT need to be @mentioned to receive a message — but you should **only respond** when you are explicitly @mentioned, assigned a task, or asked a question. Unsolicited responses create noise.
 
 **Get the actual Matrix domain at runtime before sending any @mention:**
 ```bash
@@ -85,7 +85,7 @@ You MUST @mention Manager (using the full domain from `echo $HICLAW_MATRIX_DOMAI
 | Replying to Manager's message | `@manager:matrix-local.hiclaw.io:18080 <your reply>` |
 | Critical info for another Worker | `@worker-name:matrix-local.hiclaw.io:18080 <info>` |
 
-**Phase completion reports MUST always @mention Manager** — this is what triggers the Manager to proceed to the next phase. A completion message without @mention is silently dropped and the workflow stalls.
+**Phase completion reports MUST always @mention Manager** — this is what triggers the Manager to proceed to the next phase. A completion message without @mention may be deprioritized or missed, and the workflow stalls.
 
 Mid-task progress updates (informational only, no action needed from Manager) do not need @mention:
 ```
