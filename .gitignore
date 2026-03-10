@@ -9,6 +9,9 @@ logs/
 .kiro/
 .idea/
 
+# OMC (oh-my-claudecode) state
+.omc/
+
 # OS files
 .DS_Store
 

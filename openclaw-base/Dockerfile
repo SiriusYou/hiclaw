@@ -24,6 +24,7 @@ ARG HTTPS_PROXY
 ARG http_proxy
 ARG https_proxy
 ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG OPENCLAW_VERSION=v2026.3.8
 
 # Set proxy as environment variables to ensure all tools can use them
 ENV HTTP_PROXY=${HTTP_PROXY} \
@@ -47,20 +48,18 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     npm install -g pnpm && \
     rm -rf /var/lib/apt/lists/*
 
-# Clone, build, and optimize OpenClaw
-# 1. Clone with single branch to minimize .git size
+# Clone, build, and optimize OpenClaw (upstream, no fork)
+# 1. Clone specific version tag to minimize .git size
 # 2. Install dependencies and build
 # 3. Remove unnecessary files (tests, .git, etc.) - keep all node_modules for extensions
-RUN git clone --depth 1 --single-branch \
-        https://github.com/johnlanni/openclaw.git /opt/openclaw && \
+RUN git clone --depth 1 --single-branch --branch ${OPENCLAW_VERSION} \
+        https://github.com/openclaw/openclaw.git /opt/openclaw && \
     cd /opt/openclaw && \
-    git fetch --depth 1 origin df5225e1fc310158f84f888b74ba2ea815190181 && \
-    git checkout df5225e1fc310158f84f888b74ba2ea815190181 && \
     pnpm config set registry ${NPM_REGISTRY} && \
     pnpm install && \
     pnpm build && \
     echo "==> Verifying critical native addons..." && \
-    ADDON_DIR=/opt/openclaw/node_modules/.pnpm/@matrix-org+matrix-sdk-crypto-nodejs@0.4.0/node_modules/@matrix-org/matrix-sdk-crypto-nodejs && \
+    ADDON_DIR=$(ls -d /opt/openclaw/node_modules/.pnpm/@matrix-org+matrix-sdk-crypto-nodejs@*/node_modules/@matrix-org/matrix-sdk-crypto-nodejs 2>/dev/null | head -1) && \
     ls "$ADDON_DIR"/matrix-sdk-crypto.linux-*.node 2>/dev/null | grep -q . \
         || (echo "ERROR: matrix-sdk-crypto native addon missing (pnpm install may have silently failed on this arch)" && exit 1) && \
     echo "==> Native addon check passed: $(ls $ADDON_DIR/matrix-sdk-crypto.linux-*.node)" && \

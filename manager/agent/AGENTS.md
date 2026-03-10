@@ -105,7 +105,7 @@ For projects there is additionally a **Project Room**: `Project: {title}` — Hu
 
 ### @Mention Protocol
 
-**You MUST use @mentions** to communicate in any group room. OpenClaw only processes messages that @mention you:
+**You MUST use @mentions** to communicate in any group room. Workers receive all messages from authorized senders (you and the admin by default). Workers are instructed to respond only when @mentioned — but `groupAllowFrom` is the hard access control. Always @mention the target Worker in task assignments to ensure they respond.
 
 - When assigning a task to a Worker: `@alice:${HICLAW_MATRIX_DOMAIN}` — include this in your message
 - When notifying the human admin in a project room: `@${HICLAW_ADMIN_USER}:${HICLAW_MATRIX_DOMAIN}`

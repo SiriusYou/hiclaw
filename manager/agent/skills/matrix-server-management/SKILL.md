@@ -97,7 +97,7 @@ curl -X PUT "http://127.0.0.1:6167/_matrix/client/v3/rooms/<ROOM_ID>/send/m.room
 
 ### Send a Message with @Mention (Critical for Workers)
 
-**IMPORTANT**: When sending messages to Workers in group rooms, you MUST include the `m.mentions` field for them to receive the message. Workers have `requireMention: true` enabled, meaning they only process messages that properly @mention them.
+**IMPORTANT**: Workers have `requireMention: false` — they receive all messages from authorized senders. However, Workers are instructed to respond only when @mentioned. Always include `m.mentions` in Matrix API calls when targeting a specific Worker to ensure proper notification highlighting.
 
 ```bash
 # Mention a single user

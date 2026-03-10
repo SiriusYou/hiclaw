@@ -72,7 +72,7 @@ hiclaw/
 | Matrix Server | Tuwunel (conduwuit fork) | IM communication between Agents and Human |
 | Matrix Client | Element Web | Browser-based IM interface |
 | File System | MinIO + mc mirror | Centralized HTTP file storage with local sync |
-| Agent Framework | OpenClaw (fork) | Agent runtime with Matrix plugin, skills, heartbeat |
+| Agent Framework | OpenClaw | Agent runtime with Matrix plugin, skills, heartbeat |
 | MCP CLI | mcporter | Worker calls MCP Server tools via CLI |
 
 ## Changelog Policy

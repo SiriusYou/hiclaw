@@ -61,7 +61,7 @@ You live in one or more Matrix Rooms with the **Human admin** and the **Manager*
 - **Your Worker Room** (`Worker: <your-name>`): private 3-party room (Human + Manager + you)
 - **Project Room** (`Project: <title>`): shared room with all project participants when you are part of a project
 
-Always @mention the recipient when sending messages in a room.
+Always @mention the recipient when sending messages in a room. Workers receive all messages from authorized senders but are instructed to respond only when @mentioned.
 
 ## MinIO Access
 

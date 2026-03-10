@@ -22,6 +22,8 @@ VERSION        ?= latest
 REGISTRY       ?= higress-registry.cn-hangzhou.cr.aliyuncs.com
 REPO           ?= higress
 
+OPENCLAW_VERSION   ?= v2026.3.8
+
 MANAGER_IMAGE       ?= $(REGISTRY)/$(REPO)/hiclaw-manager
 WORKER_IMAGE        ?= $(REGISTRY)/$(REPO)/hiclaw-worker
 OPENCLAW_BASE_IMAGE ?= $(REGISTRY)/$(REPO)/openclaw-base
@@ -55,6 +57,7 @@ endif
 
 REGISTRY_ARG = --build-arg HIGRESS_REGISTRY=$(HIGRESS_REGISTRY)
 BUILTIN_VERSION_ARG = --build-arg BUILTIN_VERSION=$(VERSION)
+OPENCLAW_VERSION_ARG = --build-arg OPENCLAW_VERSION=$(OPENCLAW_VERSION)
 
 # Multi-arch build configuration
 # Platforms for multi-arch builds (comma-separated, no spaces)
@@ -92,8 +95,8 @@ all: build
 build: build-manager build-worker ## Build all images (base image pulled from registry, not rebuilt locally)
 
 build-openclaw-base: ## Build OpenClaw base image
-	@echo "==> Building OpenClaw base image: $(LOCAL_OPENCLAW_BASE) (registry: $(HIGRESS_REGISTRY))"
-	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(DOCKER_BUILD_ARGS) \
+	@echo "==> Building OpenClaw base image: $(LOCAL_OPENCLAW_BASE) (registry: $(HIGRESS_REGISTRY), openclaw: $(OPENCLAW_VERSION))"
+	docker build $(PLATFORM_FLAG) $(REGISTRY_ARG) $(OPENCLAW_VERSION_ARG) $(DOCKER_BUILD_ARGS) \
 		-t $(LOCAL_OPENCLAW_BASE) \
 		./openclaw-base/
 
@@ -160,7 +163,7 @@ ifeq ($(IS_PODMAN),1)
 	$(foreach plat,$(subst $(comma), ,$(MULTIARCH_PLATFORMS)), \
 		echo "  -> Building OpenClaw base for $(plat)..." && \
 		podman build --platform $(plat) \
-			$(REGISTRY_ARG) $(DOCKER_BUILD_ARGS) \
+			$(REGISTRY_ARG) $(OPENCLAW_VERSION_ARG) $(DOCKER_BUILD_ARGS) \
 			--manifest $(OPENCLAW_BASE_TAG) \
 			./openclaw-base/ && ) true
 	podman manifest push --all $(OPENCLAW_BASE_TAG) docker://$(OPENCLAW_BASE_TAG)
@@ -171,7 +174,7 @@ else
 	docker buildx build \
 		--builder $(BUILDX_BUILDER) \
 		--platform $(MULTIARCH_PLATFORMS) \
-		$(REGISTRY_ARG) $(DOCKER_BUILD_ARGS) \
+		$(REGISTRY_ARG) $(OPENCLAW_VERSION_ARG) $(DOCKER_BUILD_ARGS) \
 		-t $(OPENCLAW_BASE_TAG) \
 		$(if $(PUSH_LATEST),-t $(OPENCLAW_BASE_IMAGE):latest) \
 		--push \
@@ -399,6 +402,7 @@ help: ## Show this help
 	@echo "  VERSION              Image tag             (default: latest)"
 	@echo "  REGISTRY             Container registry    (default: higress-registry.cn-hangzhou.cr.aliyuncs.com)"
 	@echo "  REPO                 Repository path       (default: higress/hiclaw)"
+	@echo "  OPENCLAW_VERSION     OpenClaw version tag  (default: v2026.3.8)"
 	@echo "  HIGRESS_REGISTRY     Base image registry   (default: cn-hangzhou, see below)"
 	@echo "  SKIP_BUILD           Skip build in 'install' (set to 1 to skip)"
 	@echo "  SKIP_INSTALL         Skip install in 'test' (set to 1 to test existing)"
