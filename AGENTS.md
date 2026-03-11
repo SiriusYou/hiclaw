@@ -15,7 +15,7 @@ hiclaw/
 ├── install/          # One-click installation scripts
 ├── scripts/          # Utility scripts (replay-task.sh for sending tasks to Manager via Matrix)
 ├── hack/             # Maintenance scripts (mirror-images.sh for syncing base images to registry)
-├── tests/            # Automated integration test suite (10 test cases)
+├── tests/            # Automated integration test suite (14 test scripts: 13 blocking + 1 non-blocking behavioral test)
 ├── .github/workflows/# CI/CD: build images, run tests, release
 ├── docs/             # User-facing documentation
 ├── design/           # Internal design documents and API specs

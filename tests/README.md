@@ -1,6 +1,6 @@
 # HiClaw Integration Tests
 
-Automated integration test suite that validates all 10 POC acceptance cases.
+Automated integration test suite with 14 test scripts (13 blocking + 1 non-blocking behavioral test).
 
 ## Architecture
 
@@ -33,6 +33,10 @@ Test Script                     HiClaw System
 | test-09 | Case 9 | Multi-Worker GitHub collaboration |
 | test-10 | Case 10 | MCP permission dynamic revoke/restore |
 | test-11 | Feature | Multi-round GitHub PR collaboration |
+| test-12 | Feature | GitHub MCP tools integration |
+| test-13 | Feature | Git delegation (Worker pushes via Manager gateway) |
+| test-14 | Feature | Git collaboration (local bare repo PR simulation) |
+| test-15 | Feature | Worker stays silent when not @mentioned (non-blocking) |
 
 ## Running Tests
 

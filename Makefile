@@ -100,8 +100,8 @@ build-openclaw-base: ## Build OpenClaw base image
 		-t $(LOCAL_OPENCLAW_BASE) \
 		./openclaw-base/
 
-# build targets use the locally-built openclaw-base; push targets use the registry image
-# Both build and push targets use the registry :latest base image for layer sharing
+# Both build and push targets use the registry :latest base image by default.
+# To use a locally-built openclaw-base, override: make build OPENCLAW_BASE_BUILD_ARG="--build-arg OPENCLAW_BASE_IMAGE=hiclaw/openclaw-base:latest"
 OPENCLAW_BASE_BUILD_ARG = --build-arg OPENCLAW_BASE_IMAGE=$(OPENCLAW_BASE_IMAGE):latest
 # push targets always use :latest so manager/worker layers are shared across releases
 OPENCLAW_BASE_PUSH_ARG  = --build-arg OPENCLAW_BASE_IMAGE=$(OPENCLAW_BASE_IMAGE):latest
