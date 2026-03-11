@@ -187,6 +187,7 @@ RESULTS=()
 # Exception: when TEST_FILTER explicitly targets a non-blocking test, treat it
 # as blocking (the user is deliberately debugging that test).
 NON_BLOCKING_TESTS="15"
+TEST_FILTER_COUNT=$(echo "${TEST_FILTER}" | wc -w | tr -d ' ')
 
 # Determine which tests to run
 TESTS=()
@@ -209,7 +210,7 @@ for test_file in "${TESTS[@]}"; do
     # Determine if this test is non-blocking (unless explicitly targeted via TEST_FILTER)
     is_non_blocking=false
     if echo "${NON_BLOCKING_TESTS}" | grep -qw "${test_num}"; then
-        if [ -z "${TEST_FILTER}" ] || [ "$(echo "${TEST_FILTER}" | wc -w)" -gt 1 ]; then
+        if [ -z "${TEST_FILTER}" ] || [ "${TEST_FILTER_COUNT}" -gt 1 ]; then
             is_non_blocking=true
         fi
     fi
