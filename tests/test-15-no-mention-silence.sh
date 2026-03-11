@@ -48,6 +48,13 @@ MAX_RETRIES=2
 GRACE_WINDOW=90  # seconds to wait for Worker silence
 LAST_FAILURE_REASON=""
 
+# Helper: get the latest event_id from a specific sender in the room
+_latest_event_from() {
+    matrix_read_messages "$1" "$2" 5 2>/dev/null | \
+        jq -r --arg user "@$3" \
+        '[.chunk[] | select(.sender | startswith($user)) | .event_id] | first // ""' 2>/dev/null
+}
+
 for attempt in $(seq 0 ${MAX_RETRIES}); do
     if [ "${attempt}" -gt 0 ]; then
         log_info "Retry ${attempt}/${MAX_RETRIES}..."
@@ -55,9 +62,7 @@ for attempt in $(seq 0 ${MAX_RETRIES}); do
     fi
 
     # Snapshot: get the latest Worker message event_id before our test
-    BASELINE_EVENT=$(matrix_read_messages "${ADMIN_TOKEN}" "${WORKER_ROOM_ID}" 5 2>/dev/null | \
-        jq -r --arg user "@${WORKER_NAME}" \
-        '[.chunk[] | select(.sender | startswith($user)) | .event_id] | first // ""' 2>/dev/null)
+    BASELINE_EVENT=$(_latest_event_from "${ADMIN_TOKEN}" "${WORKER_ROOM_ID}" "${WORKER_NAME}")
 
     # Send a message WITHOUT @mentioning the Worker
     TEST_MSG="General status update: all systems nominal. No action needed from anyone. (test-15 attempt ${attempt})"
@@ -99,9 +104,7 @@ for attempt in $(seq 0 ${MAX_RETRIES}); do
         sleep 15
         ELAPSED=$((ELAPSED + 15))
 
-        LATEST_EVENT=$(matrix_read_messages "${ADMIN_TOKEN}" "${WORKER_ROOM_ID}" 5 2>/dev/null | \
-            jq -r --arg user "@${WORKER_NAME}" \
-            '[.chunk[] | select(.sender | startswith($user)) | .event_id] | first // ""' 2>/dev/null)
+        LATEST_EVENT=$(_latest_event_from "${ADMIN_TOKEN}" "${WORKER_ROOM_ID}" "${WORKER_NAME}")
 
         if [ -n "${LATEST_EVENT}" ] && [ "${LATEST_EVENT}" != "${BASELINE_EVENT}" ]; then
             WORKER_RESPONDED=true
