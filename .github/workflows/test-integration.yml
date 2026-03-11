@@ -43,6 +43,8 @@ env:
   COPAW_WORKER_IMAGE: hiclaw/copaw-worker:ci-test
   # Tests that do not require a GitHub token
   NON_GITHUB_TESTS: "01 02 03 04 05 06 14"
+  # Extra tests appended to the default run filter (not included in metrics/baseline)
+  NON_GITHUB_TESTS_EXTRA: "15"
 
 jobs:
   integration-tests:
@@ -134,7 +136,8 @@ jobs:
           HICLAW_LLM_API_KEY: ${{ secrets.HICLAW_LLM_API_KEY }}
         run: |
           FILTER="${{ github.event.inputs.test_filter }}"
-          [ -z "$FILTER" ] && FILTER="${NON_GITHUB_TESTS}"
+          [ -z "$FILTER" ] && FILTER="${NON_GITHUB_TESTS} ${NON_GITHUB_TESTS_EXTRA}"
+          echo "ACTUAL_TEST_FILTER=$FILTER" >> "$GITHUB_ENV"
           TEST_GATEWAY_PORT=18080 TEST_CONSOLE_PORT=18001 TEST_MANAGER_CONTAINER=hiclaw-manager \
             ./tests/run-all-tests.sh --skip-build --use-existing --test-filter "$FILTER"
 
@@ -231,7 +234,7 @@ jobs:
         if: always()
         run: |
           echo "### Integration Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Tests: \`$NON_GITHUB_TESTS\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: \`${ACTUAL_TEST_FILTER:-${NON_GITHUB_TESTS} ${NON_GITHUB_TESTS_EXTRA}}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Manager Image: \`${{ env.MANAGER_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Worker Runtime: \`${{ inputs.worker_runtime || 'openclaw' }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Model: \`${{ inputs.model || 'qwen3.5-plus' }}\`" >> $GITHUB_STEP_SUMMARY
