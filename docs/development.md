@@ -148,7 +148,7 @@ This reads credentials from `./hiclaw-manager.env` and skips the container lifec
 ### Full Integration Test Suite
 
 ```bash
-# Build images + run all 10 test cases
+# Build images + run all 14 test scripts (13 blocking + 1 non-blocking)
 export HICLAW_LLM_API_KEY="your-api-key"
 make test
 ```

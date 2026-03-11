@@ -103,7 +103,7 @@ build-openclaw-base: ## Build OpenClaw base image
 		-t $(LOCAL_OPENCLAW_BASE) \
 		./openclaw-base/
 
-# build targets use the locally-built openclaw-base; push targets use the registry image
+# Both build and push targets use the registry base image by default.
 # OPENCLAW_BASE_VERSION controls which base image tag manager/worker builds depend on.
 # Default: latest (for standalone builds). Override to use a versioned base (e.g. in build-all).
 OPENCLAW_BASE_VERSION ?= latest

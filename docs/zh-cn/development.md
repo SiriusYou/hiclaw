@@ -148,7 +148,7 @@ make test-installed TEST_FILTER="01 02"
 ### 完整集成测试套件
 
 ```bash
-# 构建镜像 + 运行全部 10 个测试用例
+# 构建镜像 + 运行全部 14 个测试脚本（13 个阻塞 + 1 个非阻塞行为测试）
 export HICLAW_LLM_API_KEY="your-api-key"
 make test
 ```
