@@ -1,0 +1,152 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Daily at 08:00 UTC (01:00 PDT / 16:00 CST)
+  workflow_dispatch:
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/alibaba/hiclaw.git
+
+      - name: Fetch upstream and origin
+        run: |
+          git fetch upstream --tags
+          git fetch origin --prune --tags
+
+      - name: Check for new upstream commits
+        id: check
+        run: |
+          BEHIND=$(git rev-list --count origin/main..upstream/main)
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" = "0" ]; then
+            echo "Origin is up to date with upstream. Nothing to do."
+          else
+            echo "Origin is $BEHIND commits behind upstream."
+          fi
+
+      - name: Tag SHA conflict precheck
+        if: steps.check.outputs.behind != '0'
+        run: |
+          UPSTREAM_TAGS=$(git ls-remote --tags --refs upstream)
+          ORIGIN_TAGS=$(git ls-remote --tags --refs origin)
+          CONFLICTS=$(comm -12 \
+            <(echo "$UPSTREAM_TAGS" | awk '{print $2}' | sort) \
+            <(echo "$ORIGIN_TAGS" | awk '{print $2}' | sort) \
+            | while read ref; do
+                U=$(echo "$UPSTREAM_TAGS" | awk -v ref="$ref" '$2==ref {print $1}')
+                O=$(echo "$ORIGIN_TAGS" | awk -v ref="$ref" '$2==ref {print $1}')
+                [ "$U" != "$O" ] && echo "$ref U=$U O=$O"
+              done)
+          if [ -n "$CONFLICTS" ]; then
+            echo "::error::Tag SHA mismatch detected"
+            echo "$CONFLICTS"
+            exit 1
+          fi
+
+      - name: Rebase onto upstream
+        id: rebase
+        if: steps.check.outputs.behind != '0'
+        run: |
+          git checkout main
+          if git rebase upstream/main; then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push rebased main
+        if: steps.rebase.outputs.result == 'success'
+        run: |
+          git push origin main --force-with-lease
+
+      - name: Sync missing upstream tags
+        if: steps.rebase.outputs.result == 'success'
+        run: |
+          MISSING=$(comm -23 \
+            <(git ls-remote --tags --refs upstream | awk '{print $2}' | sort) \
+            <(git ls-remote --tags --refs origin | awk '{print $2}' | sort))
+          if [ -n "$MISSING" ]; then
+            echo "Pushing missing tags:"
+            echo "$MISSING"
+            echo "$MISSING" | xargs git push origin
+          else
+            echo "All upstream tags already in origin."
+          fi
+
+      - name: Fail on rebase conflict
+        if: steps.rebase.outputs.result == 'conflict'
+        run: |
+          echo "::error::Rebase failed due to merge conflicts."
+          exit 1
+
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          COMMITS_BEHIND: ${{ steps.check.outputs.behind }}
+        with:
+          script: |
+            const behind = process.env.COMMITS_BEHIND || 'unknown';
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'sync-conflict',
+            });
+            if (existing.data.length > 0) {
+              console.log('Sync conflict issue already open, skipping.');
+              return;
+            }
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Upstream sync failed (${behind} commits behind)`,
+              body: [
+                '## Automated upstream sync failed',
+                '',
+                '**Upstream:** `alibaba/hiclaw`',
+                `**Commits behind:** ${behind}`,
+                `**Failed run:** ${runUrl}`,
+                '',
+                'Possible causes: rebase conflict, tag SHA mismatch, push rejection.',
+                '',
+                '### Manual resolution steps',
+                '```bash',
+                'git remote add upstream https://github.com/alibaba/hiclaw.git',
+                'git fetch upstream --tags',
+                'git rebase upstream/main',
+                '# resolve conflicts if any',
+                'git rebase --continue',
+                'git push origin main --force-with-lease',
+                '```',
+                '',
+                'This issue will not be duplicated while it remains open.',
+              ].join('\n'),
+              labels: ['sync-conflict'],
+            });
